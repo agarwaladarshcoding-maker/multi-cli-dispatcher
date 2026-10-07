@@ -26,7 +26,9 @@ if command -v agy >/dev/null 2>&1; then
 else echo "agy missing"; fi
 
 if command -v opencode >/dev/null 2>&1; then
-  m=${OPENCODE_MODEL:-$(opencode models 2>/dev/null | grep -- '-free$' | head -1)}
+  # the model roster.md names, else the first free one opencode lists
+  m=${OPENCODE_MODEL:-$(grep -o 'opencode/[A-Za-z0-9._-]*-free' "$here/../roster.md" 2>/dev/null | head -1)}
+  m=${m:-$(opencode models 2>/dev/null | grep -- '-free$' | head -1)}
   if [ -n "$m" ]; then try opencode "$m" opencode run "$ask" -m "$m" --dir "$tmp" &
   else echo "opencode fail 0s no model: set OPENCODE_MODEL"; fi
 else echo "opencode missing"; fi
