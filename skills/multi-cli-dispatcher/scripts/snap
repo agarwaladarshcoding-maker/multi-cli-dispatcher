@@ -1,0 +1,37 @@
+#!/bin/sh
+# snap save <step> | snap restore <step> | snap diff <step>
+# Snapshots the workspace (current directory) into a shadow git store at
+# .agents/shadow, so a worker's partial or wrong edits can be undone without
+# touching the real repo's index, stash, or the user's uncommitted work.
+# Works the same inside and outside a git repo. Ignored files and .agents/
+# are left alone.
+set -eu
+[ $# -eq 2 ] || { echo "usage: snap save|restore|diff <step>" >&2; exit 2; }
+cmd=$1; tag="snap-$2"
+g() { git --git-dir=.agents/shadow --work-tree=. "$@"; }
+if [ ! -d .agents/shadow ]; then
+  mkdir -p .agents
+  git init -q --bare .agents/shadow
+  printf '.agents/\nnode_modules/\n__pycache__/\n.venv/\n' > .agents/shadow/info/exclude
+  # keep .agents/ out of the real repo's status, locally and uncommitted
+  if [ -d .git ] && ! grep -qx '.agents/' .git/info/exclude 2>/dev/null; then
+    mkdir -p .git/info && echo '.agents/' >> .git/info/exclude
+  fi
+fi
+case $cmd in
+  save)
+    g add -A
+    g -c user.name=snap -c user.email=snap@local commit -q --allow-empty -m "$tag"
+    g tag -f "$tag" >/dev/null
+    echo "saved $tag" ;;
+  diff)
+    g add -A -N
+    g diff --stat "$tag" -- . ;;
+  restore)
+    g rev-parse -q --verify "refs/tags/$tag" >/dev/null || { echo "no snapshot $tag" >&2; exit 1; }
+    g read-tree "$tag"
+    g checkout-index -a -f
+    g clean -fdq
+    echo "restored $tag" ;;
+  *) echo "usage: snap save|restore|diff <step>" >&2; exit 2 ;;
+esac

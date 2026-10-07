@@ -1,0 +1,16 @@
+#!/usr/bin/env perl
+# budget <seconds> <command...>
+# Runs the command in its own process group with stdin closed, and kills the
+# whole group when the wall-clock budget expires. Exit 124 on timeout,
+# otherwise the command's own exit code.
+use strict; use warnings; use POSIX ();
+my $secs = shift // ''; 
+die "usage: budget <seconds> <command...>\n" unless $secs =~ /^\d+$/ && @ARGV;
+my $pid = fork(); die "fork: $!\n" unless defined $pid;
+if (!$pid) { POSIX::setpgid(0, 0); open STDIN, '<', '/dev/null'; exec @ARGV or do { print STDERR "budget: exec $ARGV[0]: $!\n"; POSIX::_exit(127) } }
+my $timed_out = 0;
+local $SIG{ALRM} = sub { $timed_out = 1; kill 'TERM', -$pid; sleep 3; kill 'KILL', -$pid };
+local $SIG{INT} = local $SIG{TERM} = sub { kill 'TERM', -$pid; exit 130 };
+alarm $secs; waitpid $pid, 0; my $st = $?; alarm 0;
+if ($timed_out) { print STDERR "budget: killed after ${secs}s\n"; exit 124 }
+exit($st & 127 ? 128 + ($st & 127) : $st >> 8);

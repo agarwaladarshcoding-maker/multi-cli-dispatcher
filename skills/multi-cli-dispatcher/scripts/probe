@@ -1,0 +1,37 @@
+#!/bin/sh
+# probe [budget-seconds]
+# Sends a one-word prompt to each known worker CLI and prints one line per
+# CLI: "<cli> pass|fail|missing <seconds>s <model or reason>".
+# Pass means the word came back, not that the exit code was 0: several of
+# these CLIs exit 0 on failure. Override models with AGY_MODEL,
+# OPENCODE_MODEL, GEMINI_MODEL.
+here=$(cd "$(dirname "$0")" && pwd)
+secs=${1:-60}
+tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
+ask='Reply with the single word: pong'
+
+try() { # try <cli> <label> <command...>
+  cli=$1; label=$2; shift 2
+  s=$(date +%s)
+  "$here/budget" "$secs" "$@" > "$tmp/$cli.log" 2>&1
+  rc=$?; t=$(( $(date +%s) - s ))
+  if grep -qi 'pong' "$tmp/$cli.log"; then echo "$cli pass ${t}s $label"
+  elif [ $rc -eq 124 ]; then echo "$cli fail ${t}s timeout ($label)"
+  else echo "$cli fail ${t}s $(grep -iE 'error|denied|auth|trust|not ' "$tmp/$cli.log" | tail -1 | cut -c1-100)"
+  fi
+}
+
+if command -v agy >/dev/null 2>&1; then
+  try agy "${AGY_MODEL:-default}" agy -p "$ask" ${AGY_MODEL:+--model "$AGY_MODEL"} &
+else echo "agy missing"; fi
+
+if command -v opencode >/dev/null 2>&1; then
+  m=${OPENCODE_MODEL:-$(opencode models 2>/dev/null | grep -- '-free$' | head -1)}
+  if [ -n "$m" ]; then try opencode "$m" opencode run "$ask" -m "$m" --dir "$tmp" &
+  else echo "opencode fail 0s no model: set OPENCODE_MODEL"; fi
+else echo "opencode missing"; fi
+
+if command -v gemini >/dev/null 2>&1; then
+  try gemini "${GEMINI_MODEL:-default}" gemini -p "$ask" --skip-trust ${GEMINI_MODEL:+-m "$GEMINI_MODEL"} &
+else echo "gemini missing"; fi
+wait
