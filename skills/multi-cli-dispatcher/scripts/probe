@@ -2,20 +2,21 @@
 # probe [budget-seconds]
 # Sends a one-word prompt to each known worker CLI and prints one line per
 # CLI: "<cli> pass|fail|missing <seconds>s <model or reason>".
-# Pass means the word came back, not that the exit code was 0: several of
-# these CLIs exit 0 on failure. Override models with AGY_MODEL,
+# Pass means the answer came back, not that the exit code was 0: several of
+# these CLIs exit 0 on failure. The answer is not in the prompt, so a CLI
+# that echoes the prompt inside an error message does not pass. Override models with AGY_MODEL,
 # OPENCODE_MODEL, GEMINI_MODEL.
 here=$(cd "$(dirname "$0")" && pwd)
 secs=${1:-60}
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
-ask='Reply with the single word: pong'
+ask='Reply with one word only, in upper case: the capital of France'
 
 try() { # try <cli> <label> <command...>
   cli=$1; label=$2; shift 2
   s=$(date +%s)
   "$here/budget" "$secs" "$@" > "$tmp/$cli.log" 2>&1
   rc=$?; t=$(( $(date +%s) - s ))
-  if grep -qi 'pong' "$tmp/$cli.log"; then echo "$cli pass ${t}s $label"
+  if grep -qi 'paris' "$tmp/$cli.log"; then echo "$cli pass ${t}s $label"
   elif [ $rc -eq 124 ]; then echo "$cli fail ${t}s timeout ($label)"
   else echo "$cli fail ${t}s $(grep -iE 'error|denied|auth|trust|not ' "$tmp/$cli.log" | tail -1 | cut -c1-100)"
   fi
@@ -26,9 +27,11 @@ if command -v agy >/dev/null 2>&1; then
 else echo "agy missing"; fi
 
 if command -v opencode >/dev/null 2>&1; then
-  # the model roster.md names, else the first free one opencode lists
+  # the model roster.md names if opencode still lists it, else the first
+  # free one it does list
+  have=$(opencode models 2>/dev/null)
   m=${OPENCODE_MODEL:-$(grep -o 'opencode/[A-Za-z0-9._-]*-free' "$here/../roster.md" 2>/dev/null | head -1)}
-  m=${m:-$(opencode models 2>/dev/null | grep -- '-free$' | head -1)}
+  [ -n "${OPENCODE_MODEL:-}" ] || echo "$have" | grep -qx -- "$m" || m=$(echo "$have" | grep -- '-free$' | head -1)
   if [ -n "$m" ]; then try opencode "$m" opencode run "$ask" -m "$m" --dir "$tmp" &
   else echo "opencode fail 0s no model: set OPENCODE_MODEL"; fi
 else echo "opencode missing"; fi

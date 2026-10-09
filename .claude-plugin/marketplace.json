@@ -1,0 +1,14 @@
+{
+  "name": "multi-cli-dispatcher",
+  "description": "One skill: delegate large routine coding steps to free or cheap worker CLIs and verify the result.",
+  "owner": {
+    "name": "agarwaladarshcoding-maker"
+  },
+  "plugins": [
+    {
+      "name": "multi-cli-dispatcher",
+      "source": "./",
+      "description": "Hands large routine coding steps to free or cheap worker CLIs, then verifies the result itself."
+    }
+  ]
+}

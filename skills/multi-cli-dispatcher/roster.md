@@ -22,6 +22,10 @@ opencode run "<prompt>" -m <provider/model> --dir <workspace>
 - Auth and unknown-model errors exit 1 within seconds. A finished turn
   exits 0 whether or not the verify passed.
 - List models with `opencode models`. Free models end in `-free`.
+- Two `opencode run` commands started in the same second fail with
+  "database is locked" and exit 1. Start parallel runs 5+ seconds apart.
+- Free models differ a lot in uptime. `exo-free` answered a probe-sized
+  prompt but returned "Endpoint is unavailable" on a real work order.
 
 ### agy (Antigravity)
 
@@ -49,8 +53,10 @@ gemini -p "<prompt>" --skip-trust --approval-mode auto_edit
 
 - Without `--skip-trust` (or `GEMINI_CLI_TRUST_WORKSPACE=true`) it exits 55
   in any folder not already trusted.
-- On the free tier it retried HTTP 503 "high demand" silently until killed,
-  in every run here. Give it a short budget (45s) and treat it as a spare.
+- On the free tier it retried HTTP 503 "high demand" silently until killed
+  in most runs here, and on a 12-file work order it wrote 4 files and then
+  hit the per-minute input token quota and retried until killed. Use it
+  for small steps only, with a short budget, and treat it as a spare.
 
 ## Model table
 

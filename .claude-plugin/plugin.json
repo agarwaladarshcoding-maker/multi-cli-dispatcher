@@ -1,0 +1,9 @@
+{
+  "name": "multi-cli-dispatcher",
+  "version": "1.0.0",
+  "description": "Hands large routine coding steps to free or cheap worker CLIs (opencode, Antigravity, Gemini CLI), then verifies the result itself.",
+  "author": { "name": "agarwaladarshcoding-maker" },
+  "repository": "https://github.com/agarwaladarshcoding-maker/multi-cli-dispatcher",
+  "license": "MIT",
+  "keywords": ["delegation", "subagents", "opencode", "gemini-cli", "token-saving"]
+}

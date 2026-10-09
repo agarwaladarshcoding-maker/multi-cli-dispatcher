@@ -4,12 +4,13 @@
 # whole group when the wall-clock budget expires. Exit 124 on timeout,
 # otherwise the command's own exit code.
 use strict; use warnings; use POSIX ();
-my $secs = shift // ''; 
-die "usage: budget <seconds> <command...>\n" unless $secs =~ /^\d+$/ && @ARGV;
+my $secs = shift // '';
+unless ($secs =~ /^[1-9]\d*$/ && @ARGV) { print STDERR "usage: budget <seconds> <command...>\n"; exit 2 }
 my $pid = fork(); die "fork: $!\n" unless defined $pid;
-if (!$pid) { POSIX::setpgid(0, 0); open STDIN, '<', '/dev/null'; exec @ARGV or do { print STDERR "budget: exec $ARGV[0]: $!\n"; POSIX::_exit(127) } }
+if (!$pid) { POSIX::setpgid(0, 0); open STDIN, '<', '/dev/null'; { no warnings 'exec'; exec @ARGV } print STDERR "budget: exec $ARGV[0]: $!\n"; POSIX::_exit(127) }
 my $timed_out = 0;
-local $SIG{ALRM} = sub { $timed_out = 1; kill 'TERM', -$pid; sleep 3; kill 'KILL', -$pid };
+# TERM the group, give it up to 3s to exit, then KILL whatever is left
+local $SIG{ALRM} = sub { $timed_out = 1; kill 'TERM', -$pid; for (1..30) { last unless kill 0, -$pid; select undef, undef, undef, 0.1 } kill 'KILL', -$pid };
 local $SIG{INT} = local $SIG{TERM} = sub { kill 'TERM', -$pid; exit 130 };
 alarm $secs; waitpid $pid, 0; my $st = $?; alarm 0;
 if ($timed_out) { print STDERR "budget: killed after ${secs}s\n"; exit 124 }

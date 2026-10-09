@@ -3,35 +3,59 @@
 # Snapshots the workspace (current directory) into a shadow git store at
 # .agents/shadow, so a worker's partial or wrong edits can be undone without
 # touching the real repo's index, stash, or the user's uncommitted work.
-# Works the same inside and outside a git repo. Ignored files and .agents/
-# are left alone.
+# Works the same inside and outside a git repo.
+# Not covered, and reported instead: files your .gitignore ignores (diff
+# lists the ones that changed since save) and nested git repos (save names
+# them). .agents/ itself is left alone.
 set -eu
-[ $# -eq 2 ] || { echo "usage: snap save|restore|diff <step>" >&2; exit 2; }
+usage() { echo "usage: snap save|restore|diff <step>" >&2; exit 2; }
+[ $# -eq 2 ] || usage
 cmd=$1; tag="snap-$2"
-g() { git --git-dir=.agents/shadow --work-tree=. "$@"; }
+case $2 in ''|*[!A-Za-z0-9._-]*|.*) echo "snap: step name may use only letters, digits, . _ -" >&2; exit 2 ;; esac
+case $(pwd -P) in /|"$(cd "$HOME" && pwd -P)") echo "snap: refusing to snapshot / or \$HOME; cd into the project" >&2; exit 2 ;; esac
+# the user's hooks, signing and identity settings must not reach the shadow store
+g() { git --git-dir=.agents/shadow --work-tree=. -c core.hooksPath=/dev/null \
+  -c commit.gpgsign=false -c tag.gpgsign=false -c advice.addEmbeddedRepo=false \
+  -c user.name=snap -c user.email=snap@local "$@"; }
 if [ ! -d .agents/shadow ]; then
   mkdir -p .agents
   git init -q --bare .agents/shadow
   printf '.agents/\nnode_modules/\n__pycache__/\n.venv/\n' > .agents/shadow/info/exclude
   # keep .agents/ out of the real repo's status, locally and uncommitted
-  if [ -d .git ] && ! grep -qx '.agents/' .git/info/exclude 2>/dev/null; then
-    mkdir -p .git/info && echo '.agents/' >> .git/info/exclude
+  if ex=$(git rev-parse --git-path info/exclude 2>/dev/null) && ! grep -qx '.agents/' "$ex" 2>/dev/null; then
+    mkdir -p "$(dirname "$ex")" && echo '.agents/' >> "$ex"
   fi
 fi
+# nested git repos cannot be snapshotted: keep them out of add and diff
+nested=$(find . -mindepth 2 \( -name node_modules -o -path ./.agents \) -prune -o -name .git -print | sed 's|^\./||; s|/\.git$||')
+set -- .
+oldifs=$IFS; IFS='
+'
+for d in $nested; do set -- "$@" ":(exclude)$d"; done
+IFS=$oldifs
 case $cmd in
   save)
-    g add -A
-    g -c user.name=snap -c user.email=snap@local commit -q --allow-empty -m "$tag"
+    g add -A -- "$@"
+    g commit -q --allow-empty --no-verify -m "$tag"
     g tag -f "$tag" >/dev/null
+    touch ".agents/shadow/stamp-$tag"
+    [ -z "$nested" ] || echo "snap: nested git repos are NOT snapshotted, keep workers out of: $(echo $nested)" >&2
     echo "saved $tag" ;;
   diff)
-    g add -A -N
-    g diff --stat "$tag" -- . ;;
+    g rev-parse -q --verify "refs/tags/$tag" >/dev/null || { echo "no snapshot $tag" >&2; exit 1; }
+    g add -A -N -- "$@"
+    g diff --stat "$tag" -- "$@"
+    # ignored files are outside the snapshot: name the ones touched since save
+    if [ -f ".agents/shadow/stamp-$tag" ]; then
+      find . \( -name node_modules -o -name .git -o -name .venv -o -name __pycache__ -o -path ./.agents \) -prune \
+        -o -type f -newer ".agents/shadow/stamp-$tag" -print | g check-ignore --stdin 2>/dev/null |
+        sed 's|^\./| changed but gitignored, restore cannot undo: |' || true
+    fi ;;
   restore)
     g rev-parse -q --verify "refs/tags/$tag" >/dev/null || { echo "no snapshot $tag" >&2; exit 1; }
     g read-tree "$tag"
     g checkout-index -a -f
     g clean -fdq
     echo "restored $tag" ;;
-  *) echo "usage: snap save|restore|diff <step>" >&2; exit 2 ;;
+  *) usage ;;
 esac

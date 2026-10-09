@@ -25,6 +25,7 @@ Antigravity (`agy`) and Gemini CLI.
 
 ```sh
 git clone https://github.com/agarwaladarshcoding-maker/multi-cli-dispatcher
+mkdir -p ~/.claude/skills
 cp -R multi-cli-dispatcher/skills/multi-cli-dispatcher ~/.claude/skills/
 ~/.claude/skills/multi-cli-dispatcher/scripts/probe 45
 ```
@@ -32,6 +33,16 @@ cp -R multi-cli-dispatcher/skills/multi-cli-dispatcher ~/.claude/skills/
 The probe prints which worker CLIs answer on your machine. Then edit
 `roster.md` in the installed skill: it ships with the models and quirks
 from the author's machine, and yours will differ.
+
+To try it as a Claude Code plugin instead:
+
+```
+/plugin marketplace add agarwaladarshcoding-maker/multi-cli-dispatcher
+/plugin install multi-cli-dispatcher@multi-cli-dispatcher
+```
+
+A plugin update replaces `roster.md`, so use the copy install once you
+have edited it.
 
 Requirements: `git`, `perl` and a POSIX shell (all present on macOS and
 most Linux systems), plus at least one worker CLI that is logged in.
@@ -48,14 +59,36 @@ They are usable on their own, without the skill.
 
 ## Does it work
 
-One measured run, described in full in
-[docs/stress-test.md](docs/stress-test.md): a 16-file refactor with 32
-tests finished on a free opencode model in 66 seconds and passed an
-independent check. The same job on agy in headless mode wrote nothing and
-still exited 0, which is why the skill ignores exit codes.
+Measured on 2026-10-08 with Claude Opus 5.5 as the orchestrator, one run
+per row. The task: add docstrings to 86 functions in 12 unrelated Python
+modules and write a test file for each, with a checker that also rejects
+any change to the code itself.
 
-What is not measured yet: the end-to-end token saving, and how reliably
-the orchestrator model follows the delegation gate.
+| Run | Output tokens | Cost | Time | Check |
+| --- | --- | --- | --- | --- |
+| No skill, Opus does it all | 43,108 | $1.60 | 391s | passed |
+| Skill, work done by a free opencode model | 3,270 | $0.43 | 399s | passed |
+
+That is 92% fewer output tokens and 73% lower cost for the same wall
+time. It is one run of one task, so treat it as an example, not a
+benchmark.
+
+Claude loaded the skill unprompted in 3 of 4 runs on this task. To make
+it dependable, name it in the prompt or add one line to the project's
+`CLAUDE.md`: "Before starting any task that will write or edit 5 or more
+files, load the multi-cli-dispatcher skill." (2 of 2 with that line.)
+
+The worker's tests were nearly as strong as Opus's: with the same 150
+small bugs injected into the code, the worker's suite caught 136 and the
+two Opus suites caught 140 and 144.
+
+When it does not help: on a second task where the same edit applied to
+10 near-identical files, Opus wrote a generator script in 2,600 output
+tokens and 30 seconds, with or without the skill. Nothing beats that, and
+the skill now tells the orchestrator to script such changes itself.
+
+Full notes, including the ways workers fail silently, are in
+[docs/stress-test.md](docs/stress-test.md).
 
 ## Limits
 
@@ -64,6 +97,9 @@ the orchestrator model follows the delegation gate.
 - Free model lanes come and go. Expect to edit the model table.
 - Snapshots copy the whole workspace minus ignored files; very large
   repos will feel it.
+- Snapshots do not cover gitignored files (a worker's change to `.env`
+  is reported by `snap diff` but cannot be restored) or nested git repos
+  and submodules (named by `snap save`).
 - Worker CLIs send your code to their providers. Check that is acceptable
   for the repo you point them at.
 
@@ -82,6 +118,13 @@ the same problem as MCP servers or plugins:
 This one differs in being a single skill file plus three small scripts,
 with no server to run, a gate that argues against delegating by default,
 and a snapshot-and-verify loop built around workers that fail silently.
+
+## Feedback
+
+This is v1 and I want to know where it breaks. If you try it, open an
+[issue](https://github.com/agarwaladarshcoding-maker/multi-cli-dispatcher/issues/new/choose)
+with what you ran, which worker, and whether it saved anything. A line from
+your `.agents/task-log.md` is the most useful thing you can paste.
 
 ## License
 

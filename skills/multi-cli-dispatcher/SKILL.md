@@ -1,6 +1,6 @@
 ---
 name: multi-cli-dispatcher
-description: Offloads large, purely mechanical coding (bulk boilerplate, repetitive multi-file edits, wide read-only sweeps) to cheap worker CLIs (agy, opencode, gemini) while the orchestrator plans and verifies. Use only when a step is big and routine enough that delegating costs fewer tokens than doing it inline; small or judgment-heavy work stays inline.
+description: Hands big routine coding steps to free or cheap worker CLIs (opencode, agy, gemini) and verifies the result itself. Use whenever a task means writing or editing many files where each file must be read but little judgment is needed, such as tests or docstrings for many modules, type hints, framework or API migrations, bulk boilerplate, or a wide read-only sweep. Rough size is 5+ files or 150+ lines of output. Not for small edits, changes one script can make, design, or debugging.
 ---
 
 # Multi CLI Dispatcher
@@ -10,18 +10,28 @@ get only the work that is large, mechanical, and cheap to verify. The goal
 is fewer orchestrator tokens for the same quality, not delegation for its
 own sake.
 
-Paths below are relative to this skill's directory: `scripts/budget`,
-`scripts/snap`, `scripts/probe`, and `roster.md`.
+`scripts/budget`, `scripts/snap`, `scripts/probe` and `roster.md` live in
+this skill's directory. Call the scripts by their absolute path with the
+shell's working directory set to the workspace, never `cd` into the skill:
+`snap` snapshots whatever directory it runs in.
 
 ## Delegation gate
 
-Inline is the default. Delegate a step only when all three hold:
+Delegate a step when all three hold. Otherwise do it inline.
 
-1. Mechanical: the change can be fully specified up front, with no design
-   choice left to the worker.
+1. Routine: the outcome can be specified up front and a competent junior
+   could do it from the work order. The worker may make local choices
+   (which cases to test, how to word a docstring), never design ones.
 2. Large: roughly 150+ lines of output, or 5+ files, or a sweep that would
    mean reading 10+ files to answer one question.
 3. Checkable: a command or a short diff review proves it worked.
+
+Script first. If the same edit applies to every file, write a codemod or
+generator script inline: that costs a few hundred tokens and beats any
+worker. Delegation pays when each file needs reading and a slightly
+different edit, so no script can do it: tests, docstrings, type hints,
+migrations across unlike files. Measured on 12 unlike modules: inline cost
+43k output tokens, delegated cost 3k (`docs/stress-test.md` in the repo).
 
 Quick test: if the work order would be about as long as the change, do the
 change inline.
@@ -73,6 +83,8 @@ prompt at that file. Keep it short and self-contained:
 - One worked example of the pattern when the edit is repetitive.
 - Exact verify command, or "no shell: skip verify" for a worker that cannot
   run commands (see `roster.md`).
+- "Do the work yourself; do not call other agent CLIs or subagents."
+  Workers can load skills too, this one included.
 - Report contract: at most 10 lines, giving files changed, verify result,
   and anything left undone. No file contents, no narration.
 
@@ -80,15 +92,20 @@ prompt at that file. Keep it short and self-contained:
 
 1. Snapshot: `scripts/snap save <step>`. This works inside and outside a
    git repo and leaves the user's uncommitted work and index untouched.
+   It cannot cover gitignored files or nested git repos. Save names any
+   nested repos: keep the worker out of them.
 2. Run the worker through `scripts/budget <seconds> <command...>` with
    output sent to `.agents/logs/<step>.log`. Run long steps in the
    background. The budget wrapper closes stdin, kills the whole process
    group on expiry, and exits 124. Do not rely on `timeout`; stock macOS
-   does not have it.
+   does not have it. The budget counts awake time: if the machine sleeps
+   mid-step the worker usually dies with a network error, so rerun it.
 3. Read only the tail of the log (about 20 lines), never the whole log.
 4. Verify, yourself: `scripts/snap diff <step>` for the list of files that
    changed, then the verify command, then targeted reads of the hunks most
-   likely to be wrong. Check that no protected file is in the diff.
+   likely to be wrong. Check that no protected file is in the diff. A
+   "changed but gitignored" line means the worker touched a file restore
+   cannot undo (often `.env`): inspect it by hand.
 5. Pass, or `scripts/snap restore <step>` and fall back.
 
 The exit code never decides step 5. Every worker tested exits 0 in at least
@@ -99,6 +116,8 @@ Parallel is allowed only for steps with disjoint file sets, one writer per
 directory, each verified separately. Snapshots are whole-workspace, so a
 restore undoes every parallel step since that snapshot: snapshot once
 before the batch, and on a failure restore and rerun the batch in order.
+Run `snap` commands one at a time; they share one index. Start parallel
+workers a few seconds apart (see `roster.md`).
 Dependent steps run in order, each taking its inputs from the previous
 step's verified output.
 
