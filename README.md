@@ -1,11 +1,23 @@
 # multi-cli-dispatcher
 
-A skill for Claude Code (and other agents that read `SKILL.md`) that hands
-large, mechanical coding steps to cheaper worker CLIs, then verifies the
-result itself. The expensive model plans and checks; a free or cheap model
-does the typing.
+An agent skill that hands large, mechanical coding steps to cheaper worker
+CLIs, then verifies the result itself. The expensive model plans and
+checks; a free or cheap model does the typing.
 
-Workers supported out of the box: [opencode](https://opencode.ai),
+It is one `SKILL.md` plus three shell scripts, so any agent that reads
+skills can use it. Checked on 2026-10-09, each host asked whether it could
+see the installed skill:
+
+| Host | Sees it after `install.sh` |
+| --- | --- |
+| Claude Code | yes |
+| Antigravity (`agy`) | yes |
+| Muse Code | yes |
+| Codex CLI | yes |
+| Gemini CLI | yes |
+| opencode | yes |
+
+Workers it can delegate to out of the box: [opencode](https://opencode.ai),
 Antigravity (`agy`) and Gemini CLI.
 
 ## What it does
@@ -25,23 +37,31 @@ Antigravity (`agy`) and Gemini CLI.
 
 ```sh
 git clone https://github.com/agarwaladarshcoding-maker/multi-cli-dispatcher
-mkdir -p ~/.claude/skills
-cp -R multi-cli-dispatcher/skills/multi-cli-dispatcher ~/.claude/skills/
-~/.claude/skills/multi-cli-dispatcher/scripts/probe 45
+cd multi-cli-dispatcher && ./install.sh
 ```
 
-The probe prints which worker CLIs answer on your machine. Then edit
-`roster.md` in the installed skill: it ships with the models and quirks
-from the author's machine, and yours will differ.
+The installer puts one copy in `~/.agents/skills/multi-cli-dispatcher`,
+which Codex, Gemini CLI, opencode and Muse read already. It links that
+copy into `~/.claude/skills` for Claude Code, and adds it to
+`~/.gemini/config/skills.json` for Antigravity, which does not follow
+symlinks. Rerun it to update: your edited `roster.md` is kept.
+`./install.sh --uninstall` removes it.
 
-To try it as a Claude Code plugin instead:
+Then see which workers answer on your machine, and edit `roster.md` to
+match. It ships with the models and quirks from the author's machine.
+
+```sh
+~/.agents/skills/multi-cli-dispatcher/scripts/probe 45
+```
+
+Claude Code users can also install it as a plugin:
 
 ```
 /plugin marketplace add agarwaladarshcoding-maker/multi-cli-dispatcher
 /plugin install multi-cli-dispatcher@multi-cli-dispatcher
 ```
 
-A plugin update replaces `roster.md`, so use the copy install once you
+A plugin update replaces `roster.md`, so prefer `install.sh` once you
 have edited it.
 
 Requirements: `git`, `perl` and a POSIX shell (all present on macOS and
@@ -59,7 +79,7 @@ They are usable on their own, without the skill.
 
 ## Does it work
 
-Measured on 2026-10-08 with Claude Opus 5.5 as the orchestrator, one run
+Measured on 2026-10-08 with Claude Opus 5.5 in Claude Code as the orchestrator, one run
 per row. The task: add docstrings to 86 functions in 12 unrelated Python
 modules and write a test file for each, with a checker that also rejects
 any change to the code itself.
@@ -92,8 +112,10 @@ Full notes, including the ways workers fail silently, are in
 
 ## Limits
 
-- Tested on macOS only, with three CLIs at the versions listed in
-  `roster.md`. Headless flags of these tools change often.
+- Tested on macOS only, with three worker CLIs at the versions listed in
+  `roster.md`. The cost numbers above were measured with Claude Code as
+  the host; other hosts load the skill but have not been benchmarked.
+- Headless flags of these tools change often.
 - Free model lanes come and go. Expect to edit the model table.
 - Snapshots copy the whole workspace minus ignored files; very large
   repos will feel it.

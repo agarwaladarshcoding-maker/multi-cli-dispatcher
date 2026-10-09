@@ -1,7 +1,7 @@
 {
   "name": "multi-cli-dispatcher",
   "version": "1.0.0",
-  "description": "Hands large routine coding steps to free or cheap worker CLIs (opencode, Antigravity, Gemini CLI), then verifies the result itself.",
+  "description": "Hands large routine coding steps to free or cheap worker CLIs (opencode, Antigravity, Gemini CLI), then verifies the result itself. Also works as a plain skill in Antigravity, Muse, Codex and Gemini CLI via install.sh.",
   "author": { "name": "agarwaladarshcoding-maker" },
   "repository": "https://github.com/agarwaladarshcoding-maker/multi-cli-dispatcher",
   "license": "MIT",

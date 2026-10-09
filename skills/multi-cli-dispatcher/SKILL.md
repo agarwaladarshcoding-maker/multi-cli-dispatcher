@@ -10,10 +10,16 @@ get only the work that is large, mechanical, and cheap to verify. The goal
 is fewer orchestrator tokens for the same quality, not delegation for its
 own sake.
 
+This skill works under any agent host that reads `SKILL.md` (Claude Code,
+Antigravity, Muse, Codex, Gemini CLI, opencode). "Orchestrator" means
+whichever model is reading this.
+
 `scripts/budget`, `scripts/snap`, `scripts/probe` and `roster.md` live in
-this skill's directory. Call the scripts by their absolute path with the
-shell's working directory set to the workspace, never `cd` into the skill:
-`snap` snapshots whatever directory it runs in.
+this skill's directory: the folder holding this file. If the host did not
+say where that is, look in `~/.agents/skills/multi-cli-dispatcher`, then
+`~/.claude/skills/multi-cli-dispatcher`. Call the scripts by their absolute
+path with the shell's working directory set to the workspace, never `cd`
+into the skill: `snap` snapshots whatever directory it runs in.
 
 ## Delegation gate
 
@@ -59,6 +65,10 @@ loads. Run `scripts/probe 45`. It prints one line per CLI: pass, fail, or
 missing. Keep the passing ones and lock that roster for the session.
 Recheck only when every rostered CLI fails. If nothing passes, work inline
 and say so once.
+
+Leave the CLI you are running inside off the roster unless the roster
+names a cheaper model for it: delegating to yourself on the same model
+saves nothing.
 
 A manual name like "use agy" is an override: try it first, then fall back
 normally. It does not override the gate's always-inline list.
@@ -131,8 +141,8 @@ At most two worker attempts per step, then inline.
 - Missing binary or auth failure: skip that rung immediately.
 - A model-level failure is not a CLI failure: try the next model on the
   same CLI before leaving it.
-- Second failure: restore and do the step inline. Do not spawn host
-  subagents unless the user asked for them.
+- Second failure: restore and do the step inline. Do not spawn the
+  host's own subagents unless the user asked for them.
 - A worker that reports the verify cannot pass and explains why is a
   result, not a failure. Read the reason before retrying: the work order
   may be contradictory.
